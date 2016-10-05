@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 469a139e3ef3efc4382c86a69e4ddba4, type: 3}
+  m_Name: test
+  m_EditorClassIdentifier: 
+  Local: 0
+  Saturation: 1
+  Lightness: -0.08
+  HueRotation: -180
+  SwapRatio: 1
+  Swap: 
+  Inversion: 0
+  Matrices:
+  - e00: 0.393
+    e01: 0.349
+    e02: 0.272
+    e03: 0
+    e10: 0.769
+    e11: 0.686
+    e12: 0.534
+    e13: 0
+    e20: 0.189
+    e21: 0.168
+    e22: 0.131
+    e23: 0
+    e30: 0
+    e31: 0
+    e32: 0
+    e33: 1
+  MatrixRatios:
+  - 1
+  Ranges: {x: 0, y: 0, z: 0, w: 0}
+  ColorMatrices: []
