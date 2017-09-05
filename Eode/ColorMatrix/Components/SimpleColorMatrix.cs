@@ -15,7 +15,7 @@ namespace EODE {
             {
                 if (GetComponent<SpriteRenderer>() != null)
                     _renderer.material = SpriteMaterial;
-                
+
                 _props = new MaterialPropertyBlock();
                 _renderer.GetPropertyBlock(_props);
             }
@@ -42,16 +42,17 @@ namespace EODE {
         }
         #endif
 
-    	void Start() {
+        void Start() {
             if (GetParentMatrix() != null)
             {
                 return;
             }
 
             UpdateMatrix();
-    	}
+        }
 
         public override void UpdateMatrix() {
+            // update color matrix values
             if (ColorMatrix != null)
             {
                 ColorMatrix.UpdateMatrix();
@@ -73,12 +74,13 @@ namespace EODE {
                 }
             }
 
+            // update children
             ColorMatrixBase[] cms = GetComponentsInChildren<ColorMatrixBase>();
             for (int i = 0; i < cms.Length; ++i)
             {
                 if (cms[i].gameObject == gameObject || !cms[i].isActiveAndEnabled)
                     continue;
-                
+
                 if(ColorMatrix != null)
                     cms[i].UpdateMatrix(ColorMatrix.Matrix);
                 else
@@ -92,6 +94,7 @@ namespace EODE {
 
             Matrix4x4 cm = (ColorMatrix != null ? EODE.ColorMatrix.Matrixmult4x4(ColorMatrix.Matrix, parentm) : parentm);
 
+            // update color matrix values
             if (ColorMatrix != null && _props != null)
             {
                 _props.SetMatrix("_ColorMatrix", cm);
@@ -108,14 +111,18 @@ namespace EODE {
                 _renderer.SetPropertyBlock(_props);
             }
 
+            // update children
             ColorMatrixBase[] cms = GetComponentsInChildren<ColorMatrixBase>();
             for (int i = 0; i < cms.Length; ++i)
             {
                 if (cms[i].gameObject == gameObject || !cms[i].isActiveAndEnabled)
                     continue;
-                
+
                 cms[i].UpdateMatrix(cm);
             }
-    	}
+
+            // no matrix, last child -> take parent matrix ... TODO
+            //if (ColorMatrix == null && cms.Length == 0) {}
+        }
     }
 }
