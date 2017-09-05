@@ -34,91 +34,106 @@ fixed3 ApplyColorMatrixCM(fixed3 c, float2 pos) {
 	return c;
 }
 
-
 #if UNITY_STANDARD_SIMPLE
 	half4 fragForwardBaseSimpleInternalCM (VertexOutputBaseSimple i)
 	{
-		FragmentCommonData s = FragmentSetupSimple(i);
+		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
 
-		UnityLight mainLight = MainLightSimple(i, s);
-		
-		half atten = SHADOW_ATTENUATION(i);
-		
-		half occlusion = Occlusion(i.tex.xy);
-		half rl = dot(REFLECTVEC_FOR_SPECULAR(i, s), LightDirForSpecular(i, mainLight));
-		
-		UnityGI gi = FragmentGI (s, occlusion, i.ambientOrLightmapUV, atten, mainLight);
-		half3 attenuatedLightColor = gi.light.color * mainLight.ndotl;
+	    FragmentCommonData s = FragmentSetupSimple(i);
 
-		half3 c = BRDF3_Indirect(s.diffColor, s.specColor, gi.indirect, PerVertexGrazingTerm(i, s), PerVertexFresnelTerm(i));
-		c += BRDF3DirectSimple(s.diffColor, s.specColor, s.oneMinusRoughness, rl) * attenuatedLightColor;
-		c += UNITY_BRDF_GI (s.diffColor, s.specColor, s.oneMinusReflectivity, s.oneMinusRoughness, s.normalWorld, -s.eyeVec, occlusion, gi);
-		c += Emission(i.tex.xy);
+	    UnityLight mainLight = MainLightSimple(i, s);
 
-		UNITY_APPLY_FOG(i.fogCoord, c);
+	    #if !defined(LIGHTMAP_ON) && defined(_NORMALMAP)
+	    half ndotl = saturate(dot(s.tangentSpaceNormal, i.tangentSpaceLightDir));
+	    #else
+	    half ndotl = saturate(dot(s.normalWorld, mainLight.dir));
+	    #endif
 
-		c.rgb = ApplyColorMatrixCM(c.rgb, i.tex.xy);
-		
-		return OutputForward (half4(c, 1), s.alpha);
+	    //we can't have worldpos here (not enough interpolator on SM 2.0) so no shadow fade in that case.
+	    half shadowMaskAttenuation = UnitySampleBakedOcclusion(i.ambientOrLightmapUV, 0);
+	    half realtimeShadowAttenuation = SHADOW_ATTENUATION(i);
+	    half atten = UnityMixRealtimeAndBakedShadows(realtimeShadowAttenuation, shadowMaskAttenuation, 0);
+
+	    half occlusion = Occlusion(i.tex.xy);
+	    half rl = dot(REFLECTVEC_FOR_SPECULAR(i, s), LightDirForSpecular(i, mainLight));
+
+	    UnityGI gi = FragmentGI (s, occlusion, i.ambientOrLightmapUV, atten, mainLight);
+	    half3 attenuatedLightColor = gi.light.color * ndotl;
+
+	    half3 c = BRDF3_Indirect(s.diffColor, s.specColor, gi.indirect, PerVertexGrazingTerm(i, s), PerVertexFresnelTerm(i));
+	    c += BRDF3DirectSimple(s.diffColor, s.specColor, s.smoothness, rl) * attenuatedLightColor;
+	    c += Emission(i.tex.xy);
+
+	    UNITY_APPLY_FOG(i.fogCoord, c);
+
+	    c.rgb = ApplyColorMatrixCM(c.rgb, i.tex.xy);
+
+	    return OutputForward (half4(c, 1), s.alpha);
 	}
 
 	half4 fragForwardAddSimpleInternalCM (VertexOutputForwardAddSimple i)
 	{
-		FragmentCommonData s = FragmentSetupSimpleAdd(i);
+		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
 
-		half3 c = BRDF3DirectSimple(s.diffColor, s.specColor, s.oneMinusRoughness, dot(REFLECTVEC_FOR_SPECULAR(i, s), i.lightDir));
+	    FragmentCommonData s = FragmentSetupSimpleAdd(i);
 
-		#if SPECULAR_HIGHLIGHTS // else diffColor has premultiplied light color
-			c *= _LightColor0.rgb;
-		#endif
+	    half3 c = BRDF3DirectSimple(s.diffColor, s.specColor, s.smoothness, dot(REFLECTVEC_FOR_SPECULAR(i, s), i.lightDir));
 
-		c *= LIGHT_ATTENUATION(i) * LambertTerm(LightSpaceNormal(i, s), i.lightDir);
-		
-		UNITY_APPLY_FOG_COLOR(i.fogCoord, c.rgb, half4(0,0,0,0)); // fog towards black in additive pass
+	    #if SPECULAR_HIGHLIGHTS // else diffColor has premultiplied light color
+	        c *= _LightColor0.rgb;
+	    #endif
 
-		c.rgb = ApplyColorMatrixCM(c.rgb, i.tex.xy);
+	    UNITY_LIGHT_ATTENUATION(atten, i, s.posWorld)
+	    c *= atten * saturate(dot(LightSpaceNormal(i, s), i.lightDir));
 
-		return OutputForward (half4(c, 1), s.alpha);
+	    UNITY_APPLY_FOG_COLOR(i.fogCoord, c.rgb, half4(0,0,0,0)); // fog towards black in additive pass
+
+	    c.rgb = ApplyColorMatrixCM(c.rgb, i.tex.xy);
+
+	    return OutputForward (half4(c, 1), s.alpha);
 	}
 #else
 	half4 fragForwardBaseInternalCM (VertexOutputForwardBase i) {
-		FRAGMENT_SETUP(s)
-	#if UNITY_OPTIMIZE_TEXCUBELOD
-		s.reflUVW		= i.reflUVW;
-	#endif
+		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
 
-		UnityLight mainLight = MainLight (s.normalWorld);
-		half atten = SHADOW_ATTENUATION(i);
+	    FRAGMENT_SETUP(s)
 
+	    UNITY_SETUP_INSTANCE_ID(i);
+	    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 
-		half occlusion = Occlusion(i.tex.xy);
-		UnityGI gi = FragmentGI (s, occlusion, i.ambientOrLightmapUV, atten, mainLight);
+	    UnityLight mainLight = MainLight ();
+	    UNITY_LIGHT_ATTENUATION(atten, i, s.posWorld);
 
-		half4 c = UNITY_BRDF_PBS (s.diffColor, s.specColor, s.oneMinusReflectivity, s.oneMinusRoughness, s.normalWorld, -s.eyeVec, gi.light, gi.indirect);
-		c.rgb += UNITY_BRDF_GI (s.diffColor, s.specColor, s.oneMinusReflectivity, s.oneMinusRoughness, s.normalWorld, -s.eyeVec, occlusion, gi);
-		c.rgb += Emission(i.tex.xy);
+	    half occlusion = Occlusion(i.tex.xy);
+	    UnityGI gi = FragmentGI (s, occlusion, i.ambientOrLightmapUV, atten, mainLight);
 
-		UNITY_APPLY_FOG(i.fogCoord, c.rgb);
+	    half4 c = UNITY_BRDF_PBS (s.diffColor, s.specColor, s.oneMinusReflectivity, s.smoothness, s.normalWorld, -s.eyeVec, gi.light, gi.indirect);
+	    c.rgb += Emission(i.tex.xy);
 
-		c.rgb = ApplyColorMatrixCM(c.rgb, i.tex.xy);
+	    UNITY_APPLY_FOG(i.fogCoord, c.rgb);
 
-		return OutputForward (c, s.alpha);
+	    c.rgb = ApplyColorMatrixCM(c.rgb, i.tex.xy);
+
+	    return OutputForward (c, s.alpha);
 	}
 
 	half4 fragForwardAddInternalCM (VertexOutputForwardAdd i)
 	{
-		FRAGMENT_SETUP_FWDADD(s)
+		UNITY_APPLY_DITHER_CROSSFADE(i.pos.xy);
 
-		UnityLight light = AdditiveLight (s.normalWorld, IN_LIGHTDIR_FWDADD(i), LIGHT_ATTENUATION(i));
-		UnityIndirect noIndirect = ZeroIndirect ();
+	    FRAGMENT_SETUP_FWDADD(s)
 
-		half4 c = UNITY_BRDF_PBS (s.diffColor, s.specColor, s.oneMinusReflectivity, s.oneMinusRoughness, s.normalWorld, -s.eyeVec, light, noIndirect);
-		
-		UNITY_APPLY_FOG_COLOR(i.fogCoord, c.rgb, half4(0,0,0,0)); // fog towards black in additive pass
+	    UNITY_LIGHT_ATTENUATION(atten, i, s.posWorld)
+	    UnityLight light = AdditiveLight (IN_LIGHTDIR_FWDADD(i), atten);
+	    UnityIndirect noIndirect = ZeroIndirect ();
 
-		c.rgb = ApplyColorMatrixCM(c.rgb, i.tex.xy);
+	    half4 c = UNITY_BRDF_PBS (s.diffColor, s.specColor, s.oneMinusReflectivity, s.smoothness, s.normalWorld, -s.eyeVec, light, noIndirect);
 
-		return OutputForward (c, s.alpha);
+	    UNITY_APPLY_FOG_COLOR(i.fogCoord, c.rgb, half4(0,0,0,0)); // fog towards black in additive pass
+
+	    c.rgb = ApplyColorMatrixCM(c.rgb, i.tex.xy);
+
+	    return OutputForward (c, s.alpha);
 	}
 #endif
 
